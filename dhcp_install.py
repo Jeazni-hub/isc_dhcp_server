@@ -2,48 +2,17 @@
 import os
 import threading
 import termcolor
+import ip_calculate
 
-interface = "eth0"
-sever_name = "dhcp.monreseau.tg"
-ip_add = "192.168.100.1"
-subnet_mask = "255.255.255.0"
-ip_dns_server = "192.168.100.1"
-domain_name = "monreseau.tg"
-add_router = "192.168.100.254"
-broadcast = "192.168.100.255"
-sub_net = "192.168.100.0"
-rang_min = "192.168.100.50"
-rang_max = "192.168.100.55"
-
-
-cmd = ["apt-get update && apt-get upgrade",
-       "apt-get install isc-dhcp-server",
-       f"echo 'INTERFACES=\"{interface}\"' >> /etc/default/isc-dhcp-server",
-       "conf_file",
-       f"ifconfig {interface} {ip_add} netmask {subnet_mask}"]
-
-
-line = ["#",
-        "# Sample configuration file for ISC dhcpd for Debian",
-        "#",
-        f" server-name \"{sever_name}\";",
-        f" option subnet-mask {subnet_mask};",
-        f" option domain-name-servers {ip_dns_server};",
-        f" option domain-name \"{domain_name}\";",
-        f" option routers {add_router};",
-        f" option broadcast-address {broadcast};",
-        " default-lease-time 7200;",
-        " max-lease-time 7200;",
-        f" subnet {sub_net} netmask {subnet_mask}" + " {",
-        f"	range {rang_min} {rang_max};",
-        "}"]
-
-
-comment = ["Updating of the system ...",
-           "Downloading of isc-dhcp-server ...",
-           "Setting of listening interface ...",
-           "configuration of dhcpd.conf file ...",
-           "ip address setting"]
+interface = ""
+ip_add = ""
+subnet_mask = ""
+broadcast = ""
+sub_net = ""
+rang_min = ""
+rang_max = ""
+ip_rang = ""
+line = []
 
 
 def execute(cmd, comment):
@@ -71,6 +40,8 @@ def execute(cmd, comment):
 
 def exec_cmd(cmds, comment):
     for ind, cmd in enumerate(cmds):
+        if "ifconfig" in cmd:
+            input("connect the host to the router (press enter keyboard to continuous...)")
         print(comment[ind])
         thr = threading.Thread(target=execute(cmd, comment[ind]))
         thr.start()
@@ -78,6 +49,7 @@ def exec_cmd(cmds, comment):
 
 
 def dhcpd_conf():
+    global line
     # clean dhcd.conf file
     os.system("echo '' > /etc/dhcp/dhcpd.conf")
     # rewrite it
@@ -120,11 +92,58 @@ def start():
             except:
                 print(termcolor.colored("check failed.", "red"))
         else:
-            print("dhcp server not start")
+            print(termcolor.colored("DHCP server starting failed.", "red"))
+            print("Please use external DHCP server.")
         break
 
 
-exec_cmd(cmd, comment)
-print("writing of dhcpd.conf file ...")
-check_config()
-start()
+def initialisation():
+    global interface, ip_add, subnet_mask, broadcast, sub_net, rang_min, rang_max, ip_rang
+    interface = input("listening interface (eth0 for None):\n ")
+    if interface == "":
+        interface = "eth0"
+    ip_addr = input(" (network address /30 (192.168.100.1/30 for default):\n ")
+    if ip_addr == "":
+        ip_addr = "192.168.100.0/30"
+    subnet_mask = ip_calculate.ip_calculator(ip_addr)[8]
+    broadcast = ip_calculate.ip_calculator(ip_addr)[1]
+    sub_net = ip_calculate.ip_calculator(ip_addr)[2]
+    rang_min = ip_calculate.ip_calculator(ip_addr)[3]
+    rang_max = ip_calculate.ip_calculator(ip_addr)[4]
+    ip_add = ip_calculate.ip_calculator(ip_addr)[0]
+    ip_rang = ip_calculate.ip_calculator(ip_addr)[6]
+
+
+initialisation()
+cmd = ["apt-get install isc-dhcp-server",
+       f"echo 'INTERFACES=\"{interface}\"' >> /etc/default/isc-dhcp-server",
+       "conf_file",
+       f"ifconfig {interface} {ip_add} netmask {subnet_mask}"]
+
+line = ["#",
+        "# Sample configuration file for ISC dhcpd for Debian",
+        "#",
+        # f" server-name \"{sever_name}\";",
+        f" option subnet-mask {subnet_mask};",
+        # f" option domain-name-servers {ip_dns_server};",
+        # f" option domain-name \"{domain_name}\";",
+        # f" option routers {add_router};",
+        f" option broadcast-address {broadcast};",
+        " default-lease-time 7200;",
+        " max-lease-time 7200;",
+        f" subnet {sub_net} netmask {subnet_mask}" + " {",
+        f"	range {rang_min} {rang_max};",
+        "}"]
+
+comment = ["Downloading of isc-dhcp-server ...",
+           "Setting of listening interface ...",
+           "configuration of dhcpd.conf file ...",
+           "ip address setting"]
+
+
+def start_install():
+    global cmd, comment
+    exec_cmd(cmd, comment)
+    print("writing of dhcpd.conf file ...")
+    check_config()
+    start()
